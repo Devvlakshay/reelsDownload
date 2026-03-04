@@ -1,0 +1,295 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="min-h-screen">
+    <!-- Header -->
+    <header class="h-[50px] flex items-center justify-between px-4 md:px-8 border-b border-gray-100">
+        <a href="/" class="text-lg font-bold no-underline text-gray-900">ReelGrab<span class="text-blue-600">.App</span></a>
+        <a href="/browse" class="text-sm font-semibold text-gray-600 hover:text-blue-600 no-underline transition-colors">Browse</a>
+    </header>
+
+    <!-- Nav Tabs -->
+    <div class="flex justify-evenly max-w-3xl md:w-2/4 mx-auto px-3 py-4">
+        <div class="flex flex-col items-center gap-1.5 cursor-pointer group">
+            <div class="h-8 w-8 rounded-md border border-gray-200 p-1 flex items-center justify-center group-hover:border-gray-300 transition-colors">
+                <svg class="w-[18px] h-[18px] text-blue-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="2"/><path d="m10 8 6 4-6 4Z"/></svg>
+            </div>
+            <span class="text-xs font-semibold text-gray-700">Reels</span>
+        </div>
+        <div class="flex flex-col items-center gap-1.5 cursor-pointer group">
+            <div class="h-8 w-8 rounded-md border border-gray-200 p-1 flex items-center justify-center group-hover:border-gray-300 transition-colors">
+                <svg class="w-[18px] h-[18px] text-amber-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></svg>
+            </div>
+            <span class="text-xs font-semibold text-gray-700">Video</span>
+        </div>
+        <div class="flex flex-col items-center gap-1.5 cursor-pointer group">
+            <div class="h-8 w-8 rounded-md border border-gray-200 p-1 flex items-center justify-center group-hover:border-gray-300 transition-colors">
+                <svg class="w-[18px] h-[18px] text-cyan-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
+            </div>
+            <span class="text-xs font-semibold text-gray-700">Audio</span>
+        </div>
+        <div class="flex flex-col items-center gap-1.5 cursor-pointer group">
+            <div class="h-8 w-8 rounded-md border border-gray-200 p-1 flex items-center justify-center group-hover:border-gray-300 transition-colors">
+                <svg class="w-[18px] h-[18px] text-purple-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            </div>
+            <span class="text-xs font-semibold text-gray-700">Shorts</span>
+        </div>
+        <div class="flex flex-col items-center gap-1.5 cursor-pointer group">
+            <div class="h-8 w-8 rounded-md border border-gray-200 p-1 flex items-center justify-center group-hover:border-gray-300 transition-colors">
+                <svg class="w-[18px] h-[18px] text-green-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </div>
+            <span class="text-xs font-semibold text-gray-700">Stories</span>
+        </div>
+        <div class="flex flex-col items-center gap-1.5 cursor-pointer group">
+            <div class="h-8 w-8 rounded-md border border-gray-200 p-1 flex items-center justify-center group-hover:border-gray-300 transition-colors">
+                <svg class="w-[18px] h-[18px] text-teal-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></svg>
+            </div>
+            <span class="text-xs font-semibold text-gray-700">Photo</span>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="md:w-2/4 w-full mx-auto px-3">
+        <!-- Title -->
+        <div class="text-center my-4">
+            <h1 class="text-2xl font-bold text-gray-900">Download Videos Online</h1>
+            <p class="text-sm text-gray-500 mt-1">Paste a link from YouTube or Instagram to download</p>
+        </div>
+
+        <!-- Search Input -->
+        <form id="urlForm" onsubmit="handleSubmit(event)">
+            <div class="h-14 border border-blue-500 shadow-md rounded-lg flex items-center my-3 px-3 bg-white">
+                <input id="urlInput" type="text" placeholder="Paste video link here..."
+                    class="flex-1 bg-transparent border-none outline-none text-sm font-semibold text-gray-800 placeholder-gray-400 min-w-0">
+                <button type="button" onclick="handlePaste()"
+                    class="flex items-center gap-1 text-gray-500 hover:text-gray-700 bg-transparent border-none cursor-pointer px-2 py-1 text-sm transition-colors" title="Paste">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>
+                    <span class="hidden sm:inline text-xs font-medium">Paste</span>
+                </button>
+                <button type="submit" id="submitBtn"
+                    class="ml-1 h-10 px-5 rounded-md bg-blue-600 text-white text-sm font-medium border-none cursor-pointer shadow-md hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                    Download
+                </button>
+            </div>
+        </form>
+
+        <!-- Error -->
+        <p id="errorMsg" class="text-red-500 text-sm mt-3 text-center animate-in hidden"></p>
+
+        <!-- Loading Skeleton -->
+        <div id="loadingSkeleton" class="mt-6 animate-in hidden">
+            <div class="rounded-lg border border-gray-200 p-4">
+                <div class="flex gap-4">
+                    <div class="skeleton w-36 aspect-video rounded-lg shrink-0"></div>
+                    <div class="flex-1 space-y-3 py-1">
+                        <div class="skeleton h-4 rounded w-4/5"></div>
+                        <div class="skeleton h-3 rounded w-1/2"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Result -->
+        <div id="resultSection" class="mt-6 animate-in hidden">
+            <div class="rounded-lg border border-gray-200 overflow-hidden">
+                <div class="flex gap-4 p-4">
+                    <img id="resThumbnail" src="" alt="" class="w-36 aspect-video object-cover rounded-lg shrink-0 bg-gray-100">
+                    <div class="min-w-0 flex-1">
+                        <p id="resTitle" class="text-sm font-semibold text-gray-900 leading-snug line-clamp-2"></p>
+                        <p id="resUploader" class="text-xs text-gray-500 mt-2"></p>
+                        <p id="resDuration" class="text-xs text-gray-400 mt-0.5"></p>
+                    </div>
+                </div>
+                <div class="px-4 pb-4">
+                    <div class="flex items-center gap-2 mb-3">
+                        <select id="qualitySelect" class="h-9 px-3 rounded-md border border-gray-200 bg-white text-sm text-gray-700 outline-none cursor-pointer">
+                            <option value="720p">720p HD</option>
+                            <option value="1080p">1080p Full HD</option>
+                            <option value="best">Best Quality</option>
+                        </select>
+                        <button id="audioToggle" onclick="toggleAudio()"
+                            class="flex items-center gap-1.5 h-9 px-3 rounded-md border text-sm cursor-pointer transition-colors border-blue-200 bg-blue-50 text-blue-600">
+                            <svg id="audioIcon" class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>
+                            <span id="audioLabel">Audio</span>
+                        </button>
+                    </div>
+                    <div id="downloadBtnWrap">
+                        <button id="dlBtn" onclick="handleDownload()"
+                            class="flex items-center justify-center gap-2 w-full h-11 rounded-md bg-blue-600 text-white text-sm font-medium border-none cursor-pointer shadow-md hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                            Download
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- How to use -->
+        <div id="howToSection" class="mt-10">
+            <h2 class="text-lg font-bold text-gray-900 text-center mb-5">How to Download</h2>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div class="text-center p-4">
+                    <div class="w-10 h-10 rounded-full bg-blue-50 text-blue-600 font-bold text-sm flex items-center justify-center mx-auto mb-3">1</div>
+                    <p class="text-sm font-semibold text-gray-800">Copy Link</p>
+                    <p class="text-xs text-gray-500 mt-1">Copy the video URL from YouTube or Instagram</p>
+                </div>
+                <div class="text-center p-4">
+                    <div class="w-10 h-10 rounded-full bg-blue-50 text-blue-600 font-bold text-sm flex items-center justify-center mx-auto mb-3">2</div>
+                    <p class="text-sm font-semibold text-gray-800">Paste & Download</p>
+                    <p class="text-xs text-gray-500 mt-1">Paste the link above and click Download</p>
+                </div>
+                <div class="text-center p-4">
+                    <div class="w-10 h-10 rounded-full bg-blue-50 text-blue-600 font-bold text-sm flex items-center justify-center mx-auto mb-3">3</div>
+                    <p class="text-sm font-semibold text-gray-800">Save File</p>
+                    <p class="text-xs text-gray-500 mt-1">Choose quality and save the video to your device</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="mt-16 py-6 border-t border-gray-100">
+        <div class="text-center">
+            <p class="text-sm font-bold text-gray-700">ReelGrab<span class="text-blue-600">.App</span></p>
+            <div class="flex items-center justify-center gap-4 mt-2 text-xs text-gray-400">
+                <a href="/browse" class="hover:text-gray-600 no-underline text-gray-400 transition-colors">Browse</a>
+                <span>Privacy</span>
+                <span>Terms</span>
+            </div>
+            <p class="text-xs text-gray-300 mt-2">&copy; 2026 ReelGrab. Open source video downloader.</p>
+        </div>
+    </footer>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let videoInfo = null;
+    let withAudio = true;
+    let currentPlatform = null;
+
+    // Check URL param on load
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('url')) {
+        document.getElementById('urlInput').value = params.get('url');
+        fetchInfo(params.get('url'));
+    }
+
+    function handleSubmit(e) {
+        e.preventDefault();
+        const url = document.getElementById('urlInput').value.trim();
+        if (!url) return;
+        resetState();
+        fetchInfo(url);
+    }
+
+    async function handlePaste() {
+        try {
+            const text = await navigator.clipboard.readText();
+            document.getElementById('urlInput').value = text;
+            showToast('Pasted');
+        } catch { showToast('Cannot access clipboard'); }
+    }
+
+    function resetState() {
+        videoInfo = null;
+        currentPlatform = null;
+        document.getElementById('errorMsg').classList.add('hidden');
+        document.getElementById('resultSection').classList.add('hidden');
+        document.getElementById('loadingSkeleton').classList.add('hidden');
+        document.getElementById('howToSection').classList.remove('hidden');
+        // Reset download button
+        document.getElementById('downloadBtnWrap').innerHTML = `
+            <button id="dlBtn" onclick="handleDownload()"
+                class="flex items-center justify-center gap-2 w-full h-11 rounded-md bg-blue-600 text-white text-sm font-medium border-none cursor-pointer shadow-md hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Download
+            </button>`;
+    }
+
+    function detectPlatform(url) {
+        const lower = url.toLowerCase();
+        if (lower.includes('youtube.com') || lower.includes('youtu.be')) return 'youtube';
+        if (lower.includes('instagram.com') || lower.includes('instagr.am')) return 'instagram';
+        return null;
+    }
+
+    async function fetchInfo(url) {
+        const platform = detectPlatform(url);
+        if (!platform) {
+            document.getElementById('errorMsg').textContent = 'Unsupported platform. Please use a YouTube or Instagram URL.';
+            document.getElementById('errorMsg').classList.remove('hidden');
+            return;
+        }
+        currentPlatform = platform;
+
+        document.getElementById('submitBtn').disabled = true;
+        document.getElementById('submitBtn').innerHTML = '<svg class="w-4 h-4 animate-spin" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>';
+        document.getElementById('loadingSkeleton').classList.remove('hidden');
+        document.getElementById('howToSection').classList.add('hidden');
+
+        try {
+            const endpoint = platform === 'youtube' ? '/api/youtube/info' : '/api/instagram/info';
+            const res = await apiPost(endpoint, { url });
+            videoInfo = res.data;
+            videoInfo.platform = platform;
+            showResult();
+        } catch (err) {
+            document.getElementById('errorMsg').textContent = err.message || 'Failed to fetch video info';
+            document.getElementById('errorMsg').classList.remove('hidden');
+        } finally {
+            document.getElementById('loadingSkeleton').classList.add('hidden');
+            document.getElementById('submitBtn').disabled = false;
+            document.getElementById('submitBtn').textContent = 'Download';
+        }
+    }
+
+    function showResult() {
+        if (!videoInfo) return;
+        document.getElementById('resThumbnail').src = videoInfo.thumbnail || '';
+        document.getElementById('resThumbnail').style.display = videoInfo.thumbnail ? '' : 'none';
+        document.getElementById('resTitle').textContent = videoInfo.title;
+        document.getElementById('resUploader').textContent = videoInfo.uploader;
+        document.getElementById('resDuration').textContent = videoInfo.duration_formatted && videoInfo.duration_formatted !== '0:00' ? videoInfo.duration_formatted : '';
+        document.getElementById('resultSection').classList.remove('hidden');
+        document.getElementById('howToSection').classList.add('hidden');
+    }
+
+    function toggleAudio() {
+        withAudio = !withAudio;
+        const btn = document.getElementById('audioToggle');
+        const label = document.getElementById('audioLabel');
+        if (withAudio) {
+            btn.className = 'flex items-center gap-1.5 h-9 px-3 rounded-md border text-sm cursor-pointer transition-colors border-blue-200 bg-blue-50 text-blue-600';
+            label.textContent = 'Audio';
+        } else {
+            btn.className = 'flex items-center gap-1.5 h-9 px-3 rounded-md border text-sm cursor-pointer transition-colors border-gray-200 bg-white text-gray-400';
+            label.textContent = 'Muted';
+        }
+    }
+
+    async function handleDownload() {
+        if (!videoInfo) return;
+        const quality = document.getElementById('qualitySelect').value;
+        const url = videoInfo.webpage_url || document.getElementById('urlInput').value.trim();
+        const dlBtn = document.getElementById('dlBtn');
+        dlBtn.disabled = true;
+        dlBtn.innerHTML = '<svg class="w-4 h-4 animate-spin" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg> Downloading...';
+
+        try {
+            const endpoint = currentPlatform === 'youtube' ? '/api/youtube/download' : '/api/instagram/download';
+            const res = await apiPost(endpoint, { url, quality, with_audio: withAudio });
+            showToast('Download ready!');
+            document.getElementById('downloadBtnWrap').innerHTML = `
+                <a href="${res.data.download_url}" download
+                    class="flex items-center justify-center gap-2 w-full h-11 rounded-md bg-green-600 text-white text-sm font-medium no-underline hover:bg-green-700 shadow-md transition-colors">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                    Save File
+                </a>`;
+        } catch (err) {
+            showToast(err.message || 'Download failed');
+            dlBtn.disabled = false;
+            dlBtn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Download';
+        }
+    }
+</script>
+{% endblock %}

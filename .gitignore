@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.env
+downloads/
+*.mp4
+*.webm
+.DS_Store
+venv/
+.venv/
+.vercel/
+.claude/
