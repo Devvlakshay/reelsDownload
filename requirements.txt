@@ -1,5 +1,4 @@
 flask>=3.0
-yt-dlp>=2024.8.0
+yt-dlp>=2026.1.0
 instaloader>=4.10
 gunicorn>=21.2
-secretstorage>=3.3

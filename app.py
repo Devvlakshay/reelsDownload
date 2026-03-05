@@ -1,16 +1,11 @@
 import os
 import re
-import tempfile
-import time
 import yt_dlp
 import instaloader
-from flask import Flask, render_template, request, jsonify, send_file
+from flask import Flask, render_template, request, jsonify
 
 # ─── Config ───
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DOWNLOAD_DIR = os.path.join(tempfile.gettempdir(), "reelgrab_downloads")
-os.makedirs(DOWNLOAD_DIR, exist_ok=True)
-
 COOKIES_FILE = os.path.join(BASE_DIR, "cookies.txt")
 
 YT_DLP_DEFAULT_OPTS = {
@@ -20,8 +15,8 @@ YT_DLP_DEFAULT_OPTS = {
     "socket_timeout": 30,
 }
 
-# Instagram needs cookies (login required), YouTube works better without them
-# Detect browser for Instagram-only cookie usage
+# Instagram needs cookies (login required), YouTube works better WITHOUT cookies
+# (browser cookies cause bot detection due to session mismatch)
 IG_COOKIE_OPTS = {}
 if os.path.exists(COOKIES_FILE):
     IG_COOKIE_OPTS["cookiefile"] = COOKIES_FILE
@@ -46,14 +41,6 @@ def sanitize_filename(filename):
     filename = re.sub(r'[<>:"/\\|?*#%&\x00-\x1f]', '', filename)
     filename = re.sub(r'\s+', '_', filename.strip())
     return filename[:200] if len(filename) > 200 else (filename or "untitled")
-
-
-def generate_unique_filename(base_name, extension):
-    sanitized = sanitize_filename(base_name)
-    timestamp = int(time.time() * 1000)
-    if not extension.startswith('.'):
-        extension = f'.{extension}'
-    return f"{sanitized}_{timestamp}{extension}"
 
 
 def format_duration(seconds):
@@ -97,11 +84,54 @@ def detect_platform(url):
     return None
 
 
+def _extract_info(url, extra_opts=None, use_cookies=False):
+    opts = {**YT_DLP_DEFAULT_OPTS, "skip_download": True, "ignore_no_formats_error": True}
+    if use_cookies:
+        opts.update(IG_COOKIE_OPTS)
+    if extra_opts:
+        opts.update(extra_opts)
+    with yt_dlp.YoutubeDL(opts) as ydl:
+        return ydl.extract_info(url, download=False)
+
+
+def _pick_format_url(info, quality="720p", with_audio=True):
+    """Pick the best matching direct URL from extracted format info."""
+    target_height = int(quality.replace("p", "")) if quality != "best" else 99999
+    # Filter out non-video formats (storyboards, thumbnails, etc.)
+    formats = [f for f in info.get("formats", [])
+               if f.get("url") and f.get("ext") != "mhtml"
+               and (f.get("vcodec", "none") != "none" or f.get("acodec", "none") != "none")]
+
+    # Combined (audio+video) streams
+    combined = [f for f in formats
+                if f.get("vcodec", "none") != "none"
+                and f.get("acodec", "none") != "none"]
+    # Video-only streams
+    video_only = [f for f in formats
+                  if f.get("vcodec", "none") != "none"
+                  and f.get("acodec", "none") == "none"]
+
+    if with_audio and combined:
+        candidates = [f for f in combined if (f.get("height") or 0) <= target_height]
+        if not candidates:
+            candidates = combined
+        best = max(candidates, key=lambda f: f.get("height") or 0)
+        return best.get("url"), best.get("ext", "mp4")
+
+    # Fallback: video-only (no audio available as combined) or any stream
+    pool = video_only if video_only else combined if combined else formats
+    candidates = [f for f in pool if (f.get("height") or 0) <= target_height]
+    if not candidates:
+        candidates = pool
+    if not candidates:
+        return None, None
+    best = max(candidates, key=lambda f: f.get("height") or 0)
+    return best.get("url"), best.get("ext", "mp4")
+
+
 # ─── YouTube Crawler ───
 def yt_get_video_info(url):
-    opts = {**YT_DLP_DEFAULT_OPTS, "skip_download": True, "ignore_no_formats_error": True}
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        info = ydl.extract_info(url, download=False)
+    info = _extract_info(url)
 
     formats = []
     seen = set()
@@ -143,9 +173,7 @@ def yt_get_channel_info(channel_name):
     url = f"https://www.youtube.com/@{channel_name}/videos"
     if channel_name.startswith("http"):
         url = channel_name
-    opts = {**YT_DLP_DEFAULT_OPTS, "extract_flat": True, "playlistend": 30}
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        info = ydl.extract_info(url, download=False)
+    info = _extract_info(url, {"extract_flat": True, "playlistend": 30})
 
     videos = []
     for entry in info.get("entries", []) or []:
@@ -169,9 +197,7 @@ def yt_get_channel_info(channel_name):
 
 
 def yt_get_playlist_info(playlist_url):
-    opts = {**YT_DLP_DEFAULT_OPTS, "extract_flat": True}
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        info = ydl.extract_info(playlist_url, download=False)
+    info = _extract_info(playlist_url, {"extract_flat": True})
 
     videos = []
     for entry in info.get("entries", []) or []:
@@ -193,59 +219,18 @@ def yt_get_playlist_info(playlist_url):
     }
 
 
-def yt_download_video(url, quality="720p", with_audio=True):
-    height = quality.replace("p", "") if quality != "best" else ""
-    if quality == "best":
-        format_str = "bestvideo+bestaudio/best" if with_audio else "bestvideo/best"
-    else:
-        if with_audio:
-            format_str = f"bestvideo[height<={height}]+bestaudio/bestvideo+bestaudio/best"
-        else:
-            format_str = f"bestvideo[height<={height}]/bestvideo/best"
-
-    info_opts = {**YT_DLP_DEFAULT_OPTS, "skip_download": True, "ignore_no_formats_error": True}
-    with yt_dlp.YoutubeDL(info_opts) as ydl:
-        info = ydl.extract_info(url, download=False)
-        title = info.get("title", "video")
-
-    filename = generate_unique_filename(title, "mp4")
-    filepath = os.path.join(DOWNLOAD_DIR, filename)
-    outtmpl = os.path.join(DOWNLOAD_DIR, sanitize_filename(title) + f"_{int(time.time() * 1000)}.%(ext)s")
-    opts = {
-        **YT_DLP_DEFAULT_OPTS,
-        "format": format_str,
-        "outtmpl": outtmpl,
-        "merge_output_format": "mp4",
-    }
-    if with_audio:
-        opts["postprocessors"] = [{"key": "FFmpegVideoConvertor", "preferedformat": "mp4"}]
-
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        info = ydl.extract_info(url, download=True)
-        final_ext = info.get("ext", "mp4")
-        # yt-dlp sets requested_downloads with the final filepath
-        downloads = info.get("requested_downloads", [])
-        if downloads:
-            final_path = downloads[0].get("filepath", "")
-        else:
-            final_path = outtmpl.replace("%(ext)s", final_ext)
-
-    if not os.path.exists(final_path):
-        # Fallback: scan download dir for matching files
-        base = sanitize_filename(title)
-        for f in sorted(os.listdir(DOWNLOAD_DIR), reverse=True):
-            if f.startswith(base) and not f.endswith(".part"):
-                final_path = os.path.join(DOWNLOAD_DIR, f)
-                break
-
-    return {"path": final_path, "title": title}
+def yt_get_download_url(url, quality="720p", with_audio=True):
+    info = _extract_info(url)
+    title = info.get("title", "video")
+    direct_url, ext = _pick_format_url(info, quality, with_audio)
+    if not direct_url:
+        raise Exception("No downloadable format found for this video")
+    return {"url": direct_url, "title": title, "ext": ext}
 
 
 # ─── Instagram Crawler ───
 def ig_get_reel_info(url):
-    opts = {**YT_DLP_DEFAULT_OPTS, **IG_COOKIE_OPTS, "skip_download": True, "ignore_no_formats_error": True}
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        info = ydl.extract_info(url, download=False)
+    info = _extract_info(url, use_cookies=True)
 
     formats = []
     seen = set()
@@ -321,40 +306,13 @@ def ig_get_profile_content(username):
     }
 
 
-def ig_download_reel(url, quality="720p", with_audio=True):
-    # Instagram reels have audio+video in single streams, so prefer "best" (combined)
-    # Using bestvideo+bestaudio picks video-only streams and results in muted output
-    if with_audio:
-        format_str = "best"
-    else:
-        format_str = "bestvideo"
-
-    timestamp = int(time.time() * 1000)
-    outtmpl = os.path.join(DOWNLOAD_DIR, f"reel_{timestamp}.%(ext)s")
-    opts = {
-        **YT_DLP_DEFAULT_OPTS,
-        **IG_COOKIE_OPTS,
-        "format": format_str,
-        "outtmpl": outtmpl,
-        "merge_output_format": "mp4",
-    }
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        info = ydl.extract_info(url, download=True)
-        title = info.get("title", info.get("description", "reel")[:50])
-        downloads = info.get("requested_downloads", [])
-        if downloads:
-            final_path = downloads[0].get("filepath", "")
-        else:
-            final_path = outtmpl.replace("%(ext)s", info.get("ext", "mp4"))
-
-    if not os.path.exists(final_path):
-        base = sanitize_filename(title)
-        for f in sorted(os.listdir(DOWNLOAD_DIR), reverse=True):
-            if f.startswith(base) and not f.endswith(".part"):
-                final_path = os.path.join(DOWNLOAD_DIR, f)
-                break
-
-    return {"path": final_path, "title": title}
+def ig_get_download_url(url, quality="720p", with_audio=True):
+    info = _extract_info(url, use_cookies=True)
+    title = info.get("title", info.get("description", "reel")[:50])
+    direct_url, ext = _pick_format_url(info, quality, with_audio)
+    if not direct_url:
+        raise Exception("No downloadable format found for this reel")
+    return {"url": direct_url, "title": title, "ext": ext}
 
 
 # ─── Page Routes ───
@@ -383,15 +341,8 @@ def api_youtube_info():
 def api_youtube_download():
     try:
         data = request.get_json()
-        result = yt_download_video(data["url"], data.get("quality", "720p"), data.get("with_audio", True))
-        filepath = result["path"]
-        title = sanitize_filename(result["title"])
-        response = send_file(filepath, as_attachment=True, download_name=f"{title}.mp4", mimetype="video/mp4")
-        @response.call_on_close
-        def cleanup():
-            if os.path.exists(filepath):
-                os.remove(filepath)
-        return response
+        result = yt_get_download_url(data["url"], data.get("quality", "720p"), data.get("with_audio", True))
+        return jsonify({"success": True, "data": result})
     except Exception as e:
         return jsonify({"success": False, "detail": str(e)}), 400
 
@@ -431,15 +382,8 @@ def api_instagram_info():
 def api_instagram_download():
     try:
         data = request.get_json()
-        result = ig_download_reel(data["url"], data.get("quality", "720p"), data.get("with_audio", True))
-        filepath = result["path"]
-        title = sanitize_filename(result["title"])
-        response = send_file(filepath, as_attachment=True, download_name=f"{title}.mp4", mimetype="video/mp4")
-        @response.call_on_close
-        def cleanup():
-            if os.path.exists(filepath):
-                os.remove(filepath)
-        return response
+        result = ig_get_download_url(data["url"], data.get("quality", "720p"), data.get("with_audio", True))
+        return jsonify({"success": True, "data": result})
     except Exception as e:
         return jsonify({"success": False, "detail": str(e)}), 400
 
