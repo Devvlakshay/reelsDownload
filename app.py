@@ -1,12 +1,13 @@
 import os
 import re
+import json
+import requests as http_requests
 import yt_dlp
 import instaloader
 from flask import Flask, render_template, request, jsonify
 
 # ─── Config ───
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-COOKIES_FILE = os.path.join(BASE_DIR, "cookies.txt")
 
 YT_DLP_DEFAULT_OPTS = {
     "quiet": True,
@@ -15,23 +16,115 @@ YT_DLP_DEFAULT_OPTS = {
     "socket_timeout": 30,
 }
 
-# Instagram needs cookies (login required), YouTube works better WITHOUT cookies
-# (browser cookies cause bot detection due to session mismatch)
-IG_COOKIE_OPTS = {}
-if os.path.exists(COOKIES_FILE):
-    IG_COOKIE_OPTS["cookiefile"] = COOKIES_FILE
-    print(f"[ReelGrab] Using cookies file for Instagram: {COOKIES_FILE}")
-else:
-    for browser in ["chrome", "firefox", "edge", "brave", "chromium"]:
-        try:
-            test_opts = {"quiet": True, "no_warnings": True, "skip_download": True, "cookiesfrombrowser": (browser,)}
-            with yt_dlp.YoutubeDL(test_opts) as ydl:
-                _ = ydl.cookiejar
-            IG_COOKIE_OPTS["cookiesfrombrowser"] = (browser,)
-            print(f"[ReelGrab] Using {browser} cookies for Instagram")
-            break
-        except Exception:
-            continue
+# ─── Instagram GraphQL Scraper (no login required) ───
+_IG_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+    "X-IG-App-ID": "936619743392459",
+    "X-ASBD-ID": "198387",
+    "X-IG-WWW-Claim": "0",
+    "Origin": "https://www.instagram.com",
+    "Accept": "*/*",
+}
+
+_ENCODING_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_"
+
+
+def _shortcode_to_pk(shortcode):
+    """Convert Instagram shortcode to numeric media PK."""
+    result = 0
+    for char in shortcode[:28]:
+        result = result * 64 + _ENCODING_CHARS.index(char)
+    return result
+
+
+def _extract_shortcode(url):
+    """Extract shortcode from an Instagram URL."""
+    m = re.search(r"instagram\.com/(?:p|reel|reels|tv)/([A-Za-z0-9_-]+)", url)
+    if m:
+        return m.group(1)
+    return None
+
+
+def _ig_graphql_fetch(shortcode):
+    """Fetch Instagram media info via GraphQL (no login needed)."""
+    pk = _shortcode_to_pk(shortcode)
+    session = http_requests.Session()
+
+    # Step 1: Hit ruling endpoint to get CSRF cookie
+    session.get(
+        f"https://i.instagram.com/api/v1/web/get_ruling_for_content/?content_type=MEDIA&target_id={pk}",
+        headers=_IG_HEADERS,
+        timeout=15,
+    )
+    csrf = session.cookies.get("csrftoken", default="")
+
+    # Step 2: Query GraphQL
+    variables = json.dumps({
+        "shortcode": shortcode,
+        "child_comment_count": 3,
+        "fetch_comment_count": 40,
+        "parent_comment_count": 24,
+        "has_threaded_comments": True,
+    }, separators=(",", ":"))
+
+    resp = session.post(
+        "https://www.instagram.com/graphql/query/",
+        headers={
+            **_IG_HEADERS,
+            "X-CSRFToken": csrf,
+            "X-Requested-With": "XMLHttpRequest",
+            "Referer": f"https://www.instagram.com/reel/{shortcode}/",
+            "Content-Type": "application/x-www-form-urlencoded",
+        },
+        data={
+            "fb_api_caller_class": "RelayModern",
+            "fb_api_req_friendly_name": "PolarisPostActionLoadPostQueryQuery",
+            "variables": variables,
+            "server_timestamps": "true",
+            "doc_id": "8845758582119845",
+        },
+        timeout=15,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+
+    media = data.get("data", {}).get("xdt_shortcode_media")
+    if not media:
+        raise Exception("Could not fetch reel info from Instagram")
+    return media
+
+
+def _ig_embed_fallback(shortcode):
+    """Fallback: scrape the embed page for video URL."""
+    resp = http_requests.get(
+        f"https://www.instagram.com/reel/{shortcode}/embed/",
+        headers={"User-Agent": _IG_HEADERS["User-Agent"]},
+        timeout=15,
+    )
+    # Try __additionalDataLoaded
+    m = re.search(r"window\.__additionalDataLoaded\s*\(\s*[^,]+,\s*({.+?})\s*\)\s*;", resp.text)
+    if m:
+        additional = json.loads(m.group(1))
+        items = additional.get("items", [])
+        if items and items[0].get("video_versions"):
+            best = max(items[0]["video_versions"], key=lambda v: v.get("width", 0))
+            return {
+                "video_url": best["url"],
+                "thumbnail": items[0].get("image_versions2", {}).get("candidates", [{}])[0].get("url", ""),
+                "owner": items[0].get("user", {}).get("username", "Unknown"),
+                "caption": (items[0].get("caption", {}) or {}).get("text", ""),
+                "duration": items[0].get("video_duration", 0),
+            }
+        media = additional.get("graphql", {}).get("shortcode_media") or additional.get("shortcode_media")
+        if media and media.get("video_url"):
+            return {
+                "video_url": media["video_url"],
+                "thumbnail": media.get("display_url", ""),
+                "owner": media.get("owner", {}).get("username", "Unknown"),
+                "caption": (media.get("edge_media_to_caption", {}).get("edges", [{}])[0].get("node", {}).get("text", "")),
+                "duration": media.get("video_duration", 0),
+            }
+    return None
 
 app = Flask(__name__)
 
@@ -84,10 +177,8 @@ def detect_platform(url):
     return None
 
 
-def _extract_info(url, extra_opts=None, use_cookies=False):
+def _extract_info(url, extra_opts=None):
     opts = {**YT_DLP_DEFAULT_OPTS, "skip_download": True, "ignore_no_formats_error": True}
-    if use_cookies:
-        opts.update(IG_COOKIE_OPTS)
     if extra_opts:
         opts.update(extra_opts)
     with yt_dlp.YoutubeDL(opts) as ydl:
@@ -228,37 +319,55 @@ def yt_get_download_url(url, quality="720p", with_audio=True):
     return {"url": direct_url, "title": title, "ext": ext}
 
 
-# ─── Instagram Crawler ───
+# ─── Instagram Crawler (GraphQL first, no login needed) ───
 def ig_get_reel_info(url):
-    info = _extract_info(url, use_cookies=True)
+    shortcode = _extract_shortcode(url)
+    if not shortcode:
+        raise Exception("Invalid Instagram URL")
 
-    formats = []
-    seen = set()
-    for f in info.get("formats", []):
-        height = f.get("height")
-        if height and height >= 360:
-            label = f"{height}p"
-            if label not in seen:
-                seen.add(label)
-                formats.append({
-                    "format_id": f.get("format_id"),
-                    "quality": label,
-                    "resolution": f.get("resolution", f"{f.get('width', '?')}x{height}"),
-                    "filesize": format_filesize(f.get("filesize") or f.get("filesize_approx") or 0),
-                    "ext": f.get("ext", "mp4"),
-                })
-    formats.sort(key=lambda x: int(x["quality"].replace("p", "")))
+    try:
+        media = _ig_graphql_fetch(shortcode)
+        title = ""
+        caption_edges = media.get("edge_media_to_caption", {}).get("edges", [])
+        if caption_edges:
+            title = caption_edges[0].get("node", {}).get("text", "")
+        title = title[:100] if title else "Instagram Reel"
 
-    return {
-        "title": info.get("title", info.get("description", "Instagram Reel")[:100]),
-        "thumbnail": info.get("thumbnail", ""),
-        "duration": info.get("duration", 0),
-        "duration_formatted": format_duration(info.get("duration", 0)),
-        "description": (info.get("description") or "")[:500],
-        "uploader": info.get("uploader", info.get("uploader_id", "Unknown")),
-        "webpage_url": info.get("webpage_url", url),
-        "formats": formats,
-    }
+        formats = []
+        if media.get("video_url"):
+            formats.append({
+                "format_id": "graphql_best",
+                "quality": "720p",
+                "resolution": f"{media.get('dimensions', {}).get('width', '?')}x{media.get('dimensions', {}).get('height', '?')}",
+                "filesize": "Unknown",
+                "ext": "mp4",
+            })
+
+        return {
+            "title": title,
+            "thumbnail": media.get("display_url", ""),
+            "duration": media.get("video_duration", 0),
+            "duration_formatted": format_duration(media.get("video_duration", 0)),
+            "description": title,
+            "uploader": media.get("owner", {}).get("username", "Unknown"),
+            "webpage_url": url,
+            "formats": formats,
+        }
+    except Exception:
+        # Fallback: try embed page
+        fallback = _ig_embed_fallback(shortcode)
+        if fallback:
+            return {
+                "title": (fallback["caption"][:100]) or "Instagram Reel",
+                "thumbnail": fallback["thumbnail"],
+                "duration": fallback.get("duration", 0),
+                "duration_formatted": format_duration(fallback.get("duration", 0)),
+                "description": fallback["caption"][:500],
+                "uploader": fallback["owner"],
+                "webpage_url": url,
+                "formats": [{"format_id": "embed", "quality": "720p", "resolution": "?", "filesize": "Unknown", "ext": "mp4"}],
+            }
+        raise Exception("Could not fetch reel info. Instagram may be rate-limiting this server.")
 
 
 def ig_get_profile_content(username):
@@ -307,12 +416,30 @@ def ig_get_profile_content(username):
 
 
 def ig_get_download_url(url, quality="720p", with_audio=True):
-    info = _extract_info(url, use_cookies=True)
-    title = info.get("title", info.get("description", "reel")[:50])
-    direct_url, ext = _pick_format_url(info, quality, with_audio)
-    if not direct_url:
-        raise Exception("No downloadable format found for this reel")
-    return {"url": direct_url, "title": title, "ext": ext}
+    shortcode = _extract_shortcode(url)
+    if not shortcode:
+        raise Exception("Invalid Instagram URL")
+
+    try:
+        media = _ig_graphql_fetch(shortcode)
+        video_url = media.get("video_url")
+        if not video_url:
+            raise Exception("No video found (this may be a photo post)")
+
+        caption_edges = media.get("edge_media_to_caption", {}).get("edges", [])
+        title = caption_edges[0]["node"]["text"][:50] if caption_edges else "reel"
+
+        return {"url": video_url, "title": title, "ext": "mp4"}
+    except Exception as graphql_err:
+        # Fallback: try embed page
+        fallback = _ig_embed_fallback(shortcode)
+        if fallback and fallback.get("video_url"):
+            return {
+                "url": fallback["video_url"],
+                "title": (fallback["caption"][:50]) or "reel",
+                "ext": "mp4",
+            }
+        raise Exception(f"Could not download reel: {graphql_err}")
 
 
 # ─── Page Routes ───
