@@ -277,14 +277,29 @@
 
         try {
             const endpoint = currentPlatform === 'youtube' ? '/api/youtube/download' : '/api/instagram/download';
-            const res = await apiPost(endpoint, { url, quality, with_audio: withAudio });
-            showToast('Download ready!');
-            document.getElementById('downloadBtnWrap').innerHTML = `
-                <a href="${res.data.download_url}" download
-                    class="flex items-center justify-center gap-2 w-full h-11 rounded-md bg-green-600 text-white text-sm font-medium no-underline hover:bg-green-700 shadow-md transition-colors">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-                    Save File
-                </a>`;
+            const res = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ url, quality, with_audio: withAudio }),
+            });
+            if (!res.ok) {
+                const err = await res.json();
+                throw new Error(err.detail || 'Download failed');
+            }
+            const blob = await res.blob();
+            const disposition = res.headers.get('Content-Disposition') || '';
+            const match = disposition.match(/filename\*?=(?:UTF-8''|"?)([^";]+)/i);
+            const filename = match ? decodeURIComponent(match[1]) : `${videoInfo.title || 'video'}.mp4`;
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(a.href);
+            showToast('Download complete!');
+            dlBtn.disabled = false;
+            dlBtn.innerHTML = '<svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Download';
         } catch (err) {
             showToast(err.message || 'Download failed');
             dlBtn.disabled = false;

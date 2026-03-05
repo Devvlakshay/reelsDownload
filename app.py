@@ -1,13 +1,14 @@
 import os
 import re
+import tempfile
 import time
 import yt_dlp
 import instaloader
-from flask import Flask, render_template, request, jsonify, send_from_directory
+from flask import Flask, render_template, request, jsonify, send_file
 
 # ─── Config ───
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DOWNLOAD_DIR = os.path.join(BASE_DIR, "downloads")
+DOWNLOAD_DIR = os.path.join(tempfile.gettempdir(), "reelgrab_downloads")
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 COOKIES_FILE = os.path.join(BASE_DIR, "cookies.txt")
@@ -237,13 +238,7 @@ def yt_download_video(url, quality="720p", with_audio=True):
                 final_path = os.path.join(DOWNLOAD_DIR, f)
                 break
 
-    file_size = os.path.getsize(final_path) if os.path.exists(final_path) else 0
-    return {
-        "filename": os.path.basename(final_path),
-        "filesize": format_filesize(file_size),
-        "title": title,
-        "download_url": f"/api/youtube/download-file/{os.path.basename(final_path)}",
-    }
+    return {"path": final_path, "title": title}
 
 
 # ─── Instagram Crawler ───
@@ -359,13 +354,7 @@ def ig_download_reel(url, quality="720p", with_audio=True):
                 final_path = os.path.join(DOWNLOAD_DIR, f)
                 break
 
-    file_size = os.path.getsize(final_path) if os.path.exists(final_path) else 0
-    return {
-        "filename": os.path.basename(final_path),
-        "filesize": format_filesize(file_size),
-        "title": title,
-        "download_url": f"/api/instagram/download-file/{os.path.basename(final_path)}",
-    }
+    return {"path": final_path, "title": title}
 
 
 # ─── Page Routes ───
@@ -395,7 +384,14 @@ def api_youtube_download():
     try:
         data = request.get_json()
         result = yt_download_video(data["url"], data.get("quality", "720p"), data.get("with_audio", True))
-        return jsonify({"success": True, "data": result})
+        filepath = result["path"]
+        title = sanitize_filename(result["title"])
+        response = send_file(filepath, as_attachment=True, download_name=f"{title}.mp4", mimetype="video/mp4")
+        @response.call_on_close
+        def cleanup():
+            if os.path.exists(filepath):
+                os.remove(filepath)
+        return response
     except Exception as e:
         return jsonify({"success": False, "detail": str(e)}), 400
 
@@ -420,17 +416,6 @@ def api_youtube_playlist():
         return jsonify({"success": False, "detail": str(e)}), 400
 
 
-@app.route("/api/youtube/download-file/<filename>")
-def api_youtube_download_file(filename):
-    response = send_from_directory(DOWNLOAD_DIR, filename, as_attachment=True, mimetype="video/mp4")
-    @response.call_on_close
-    def cleanup():
-        filepath = os.path.join(DOWNLOAD_DIR, filename)
-        if os.path.exists(filepath):
-            os.remove(filepath)
-    return response
-
-
 # ─── API Routes: Instagram ───
 @app.route("/api/instagram/info", methods=["POST"])
 def api_instagram_info():
@@ -447,7 +432,14 @@ def api_instagram_download():
     try:
         data = request.get_json()
         result = ig_download_reel(data["url"], data.get("quality", "720p"), data.get("with_audio", True))
-        return jsonify({"success": True, "data": result})
+        filepath = result["path"]
+        title = sanitize_filename(result["title"])
+        response = send_file(filepath, as_attachment=True, download_name=f"{title}.mp4", mimetype="video/mp4")
+        @response.call_on_close
+        def cleanup():
+            if os.path.exists(filepath):
+                os.remove(filepath)
+        return response
     except Exception as e:
         return jsonify({"success": False, "detail": str(e)}), 400
 
@@ -462,17 +454,6 @@ def api_instagram_profile():
         return jsonify({"success": True, "data": info})
     except Exception as e:
         return jsonify({"success": False, "detail": str(e)}), 400
-
-
-@app.route("/api/instagram/download-file/<filename>")
-def api_instagram_download_file(filename):
-    response = send_from_directory(DOWNLOAD_DIR, filename, as_attachment=True, mimetype="video/mp4")
-    @response.call_on_close
-    def cleanup():
-        filepath = os.path.join(DOWNLOAD_DIR, filename)
-        if os.path.exists(filepath):
-            os.remove(filepath)
-    return response
 
 
 @app.route("/api/health")
