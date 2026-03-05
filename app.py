@@ -98,7 +98,7 @@ def detect_platform(url):
 
 # ─── YouTube Crawler ───
 def yt_get_video_info(url):
-    opts = {**YT_DLP_DEFAULT_OPTS, "skip_download": True}
+    opts = {**YT_DLP_DEFAULT_OPTS, "skip_download": True, "ignore_no_formats_error": True}
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=False)
 
@@ -198,11 +198,11 @@ def yt_download_video(url, quality="720p", with_audio=True):
         format_str = "bestvideo+bestaudio/best" if with_audio else "bestvideo/best"
     else:
         if with_audio:
-            format_str = f"bestvideo[height<={height}]+bestaudio/best[height<={height}]/best"
+            format_str = f"bestvideo[height<={height}]+bestaudio/bestvideo+bestaudio/best"
         else:
-            format_str = f"bestvideo[height<={height}]/best[height<={height}]"
+            format_str = f"bestvideo[height<={height}]/bestvideo/best"
 
-    info_opts = {**YT_DLP_DEFAULT_OPTS, "skip_download": True}
+    info_opts = {**YT_DLP_DEFAULT_OPTS, "skip_download": True, "ignore_no_formats_error": True}
     with yt_dlp.YoutubeDL(info_opts) as ydl:
         info = ydl.extract_info(url, download=False)
         title = info.get("title", "video")
@@ -248,7 +248,7 @@ def yt_download_video(url, quality="720p", with_audio=True):
 
 # ─── Instagram Crawler ───
 def ig_get_reel_info(url):
-    opts = {**YT_DLP_DEFAULT_OPTS, **IG_COOKIE_OPTS, "skip_download": True}
+    opts = {**YT_DLP_DEFAULT_OPTS, **IG_COOKIE_OPTS, "skip_download": True, "ignore_no_formats_error": True}
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=False)
 
