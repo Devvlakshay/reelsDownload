@@ -46,9 +46,14 @@ def _extract_shortcode(url):
 
 
 def _ig_graphql_fetch(shortcode):
-    """Fetch Instagram media info via GraphQL (no login needed)."""
+    """Fetch Instagram media info via GraphQL, using session cookie if available."""
     pk = _shortcode_to_pk(shortcode)
     session = http_requests.Session()
+
+    # Use IG_SESSION_ID env var for authentication (needed on cloud/serverless)
+    ig_session_id = os.environ.get("IG_SESSION_ID", "")
+    if ig_session_id:
+        session.cookies.set("sessionid", ig_session_id, domain=".instagram.com")
 
     # Step 1: Hit ruling endpoint to get CSRF cookie
     session.get(
