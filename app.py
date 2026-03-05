@@ -422,7 +422,13 @@ def api_youtube_playlist():
 
 @app.route("/api/youtube/download-file/<filename>")
 def api_youtube_download_file(filename):
-    return send_from_directory(DOWNLOAD_DIR, filename, as_attachment=True, mimetype="video/mp4")
+    response = send_from_directory(DOWNLOAD_DIR, filename, as_attachment=True, mimetype="video/mp4")
+    @response.call_on_close
+    def cleanup():
+        filepath = os.path.join(DOWNLOAD_DIR, filename)
+        if os.path.exists(filepath):
+            os.remove(filepath)
+    return response
 
 
 # ─── API Routes: Instagram ───
@@ -460,7 +466,13 @@ def api_instagram_profile():
 
 @app.route("/api/instagram/download-file/<filename>")
 def api_instagram_download_file(filename):
-    return send_from_directory(DOWNLOAD_DIR, filename, as_attachment=True, mimetype="video/mp4")
+    response = send_from_directory(DOWNLOAD_DIR, filename, as_attachment=True, mimetype="video/mp4")
+    @response.call_on_close
+    def cleanup():
+        filepath = os.path.join(DOWNLOAD_DIR, filename)
+        if os.path.exists(filepath):
+            os.remove(filepath)
+    return response
 
 
 @app.route("/api/health")
