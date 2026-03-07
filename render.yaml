@@ -1,0 +1,8 @@
+services:
+  - type: web
+    name: reels-downloads
+    runtime: docker
+    plan: free
+    envVars:
+      - key: IG_SESSION_ID
+        sync: false

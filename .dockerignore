@@ -1,0 +1,14 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+.git/
+.gitignore
+.vercel/
+.claude/
+downloads/
+*.mp4
+*.webm
+.env
+cookies.txt
+render.yaml
